@@ -1,6 +1,6 @@
 services:
   yolo-api:
-    image: ghcr.io/raffaele_ragno/yolo-api-test:latest
+    image: ghcr.io/raffy952/yolo-api-test:latest
     container_name: yolo_api
     restart: always
     expose:
