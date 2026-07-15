@@ -2,6 +2,10 @@ import numpy as np
 import cv2
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from ultralytics import YOLO
+import json # Aggiungi questo import in alto
+from fastapi import Depends # Aggiungi Depends
+from sqlalchemy.orm import Session
+from database import PredictionLog, get_db
 
 app = FastAPI(title="YOLO Person Detection API")
 
@@ -50,3 +54,32 @@ async def predict_person(file: UploadFile = File(...)):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore durante l'elaborazione: {str(e)}")
+    
+# Aggiungi 'db: Session = Depends(get_db)' nei parametri
+@app.post("/predict/person")
+async def predict_person(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Il file non è un'immagine")
+
+    try:
+        # ... [La logica di OpenCV e inferenza YOLO rimane identica] ...
+        # Assumiamo di avere la lista `detections` generata dal tuo codice precedente
+
+        # 4. SALVATAGGIO A DATABASE
+        persons_count = len(detections)
+        new_log = PredictionLog(
+            persons_detected=persons_count,
+            detections_json=json.dumps(detections)
+        )
+        db.add(new_log)
+        db.commit()
+        db.refresh(new_log) # Ottiene l'ID autogenerato da SQL Server
+
+        return {
+            "log_id": new_log.id,
+            "persons_detected": persons_count, 
+            "detections": detections
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore: {str(e)}")
