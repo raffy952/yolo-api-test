@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Gestione cache delle dipendenze Python
-COPY app/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Scarica i pesi del modello YOLO in fase di build per evitare download a runtime
