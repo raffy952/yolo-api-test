@@ -1,0 +1,31 @@
+services:
+  yolo-api:
+    image: ghcr.io/raffaele_ragno/yolo-api-test:latest
+    container_name: yolo_api
+    restart: always
+    expose:
+      - "8000"
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+    networks:
+      - vision_net
+
+  reverse-proxy:
+    image: nginx:alpine
+    container_name: nginx_proxy
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - yolo-api
+    networks:
+      - vision_net
+
+networks:
+  vision_net:
+    driver: bridge
