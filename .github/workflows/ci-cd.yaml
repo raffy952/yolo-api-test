@@ -4,8 +4,9 @@ on:
   push:
     branches:
       - main
+      - monitoring_with_Grafana_and_Prometeus
   # Questo permette di avviare il workflow anche manualmente dall'interfaccia di GitHub
-  workflow_dispatch: 
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -15,7 +16,7 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    
+
     # Permessi essenziali per permettere a GitHub Actions di caricare l'immagine
     permissions:
       contents: read
@@ -46,8 +47,11 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}
           tags: |
-            # Tagga sempre come "latest"
+            # Tagga come "latest" SOLO sul branch main
             type=raw,value=latest,enable={{is_default_branch}}
+            # Sui branch di feature crea un tag con il nome del branch (es. monitoring-with-grafana-and-prometeus)
+            # cosi' puoi testare senza sovrascrivere ":latest"
+            type=ref,event=branch
             # Crea anche un tag univoco basato sull'hash del commit per tracciabilità
             type=sha,format=long
 
