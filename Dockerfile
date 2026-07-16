@@ -19,7 +19,7 @@ RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor
 WORKDIR /app
 
 # 3. Dipendenze Python
-COPY app/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 4. Download pesi YOLO
