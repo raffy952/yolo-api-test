@@ -70,7 +70,7 @@ curl http://localhost/health
 
 Inferenza (Person Detection):
 ```bash
-curl.exe -X POST "http://localhost/predict/person" -H "accept: application/json" -H "Content-Type: multipart/form-data" -F "file=@test.jpg"
+curl.exe -X POST "http://localhost/predict/person" -H "accept: application/json" -H "Content-Type: multipart/form-data" -F "file=@test/test.jpg"
 ```
 Risposta di successo:
 ```bash
