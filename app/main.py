@@ -1,24 +1,25 @@
 import numpy as np
 import cv2
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from ultralytics import YOLO
-import json # Aggiungi questo import in alto
-from fastapi import Depends # Aggiungi Depends
+import json
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from sqlalchemy.orm import Session
+from ultralytics import YOLO
+
+# Import dal tuo file database.py
 from database import PredictionLog, get_db
 
 app = FastAPI(title="YOLO Person Detection API")
 
 # PRE-CARICAMENTO: Il modello viene caricato in memoria all'avvio del container.
-# In questo esempio usiamo il modello "nano" (yolov8n.pt), ideale per inferenza CPU.
 model = YOLO("yolov8n.pt")
 
 @app.get("/health")
 def health_check():
     return {"status": "healthy", "model": "yolov8n"}
 
+# UNICO ENDPOINT UNIFICATO
 @app.post("/predict/person")
-async def predict_person(file: UploadFile = File(...)):
+async def predict_person(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Il file inviato non è un'immagine")
 
@@ -47,24 +48,6 @@ async def predict_person(file: UploadFile = File(...)):
                     "confidence": round(conf, 2)
                 })
 
-        return {
-            "persons_detected": len(detections), 
-            "detections": detections
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Errore durante l'elaborazione: {str(e)}")
-    
-# Aggiungi 'db: Session = Depends(get_db)' nei parametri
-@app.post("/predict/person")
-async def predict_person(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    if not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Il file non è un'immagine")
-
-    try:
-        # ... [La logica di OpenCV e inferenza YOLO rimane identica] ...
-        # Assumiamo di avere la lista `detections` generata dal tuo codice precedente
-
         # 4. SALVATAGGIO A DATABASE
         persons_count = len(detections)
         new_log = PredictionLog(
@@ -73,7 +56,9 @@ async def predict_person(file: UploadFile = File(...), db: Session = Depends(get
         )
         db.add(new_log)
         db.commit()
-        db.refresh(new_log) # Ottiene l'ID autogenerato da SQL Server
+        
+        # Ottiene l'ID autogenerato da SQL Server
+        db.refresh(new_log) 
 
         return {
             "log_id": new_log.id,
@@ -82,4 +67,4 @@ async def predict_person(file: UploadFile = File(...), db: Session = Depends(get
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Errore: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Errore durante l'elaborazione: {str(e)}")
