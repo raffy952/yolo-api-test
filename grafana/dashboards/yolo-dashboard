@@ -1,0 +1,93 @@
+{
+  "title": "YOLO Vision API - Monitoraggio",
+  "uid": "yolo-vision-overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Persone rilevate nel tempo (storico DB)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "mssql", "uid": "mssql-yolovision" },
+      "targets": [
+        {
+          "rawSql": "SELECT timestamp AS time, persons_detected FROM yolo_predictions ORDER BY timestamp",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Totale richieste (Prometheus)",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "prediction_requests_total", "refId": "A" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Totale persone rilevate (cumulativo)",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "persons_detected_total", "refId": "A" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Richieste al minuto",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(rate(http_requests_total[5m])) * 60", "refId": "A", "legendFormat": "req/min" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Tasso di errore (%)",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))",
+          "refId": "A",
+          "legendFormat": "errori %"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Latenza p95 inferenza (s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{handler=\"/predict/person\"}[5m])) by (le))",
+          "refId": "A",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Distribuzione persone per richiesta",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum by (le) (increase(persons_per_request_bucket[24h]))", "refId": "A", "format": "heatmap" }
+      ]
+    }
+  ]
+}

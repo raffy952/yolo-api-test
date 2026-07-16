@@ -9,6 +9,8 @@ Il sistema utilizza **YOLOv8** per l'inferenza, **FastAPI** per l'esposizione de
 - **FastAPI:** L'interfaccia web asincrona. Riceve le immagini, le decodifica direttamente in RAM (senza I/O su disco) e le passa al modello.
 - **YOLOv8 (Ultralytics):** Modello AI (versione `nano` per inferenza CPU) pre-caricato in memoria all'avvio del container per azzerare i tempi di caricamento (Cold Start).
 - **SQL Server:** Database relazionale. Attraverso SQLAlchemy e i driver nativi Microsoft (ODBC 18), salva il numero di persone rilevate, i timestamp e le coordinate JSON delle bounding box.
+- **Prometheus:** Raccoglie metriche tecniche real-time dall'API (richieste/sec, latenza, errori) e metriche di business (persone rilevate, richieste totali) tramite l'endpoint `/metrics` esposto da FastAPI.
+- **Grafana:** Dashboard di monitoraggio pre-configurata che combina lo storico completo da SQL Server con le metriche real-time da Prometheus.
 
 ---
 
@@ -68,7 +70,7 @@ curl http://localhost/health
 
 Inferenza (Person Detection):
 ```bash
-curl.exe -X POST "http://localhost/predict/person" -H "accept: application/json" -H "Content-Type: multipart/form-data" -F "file=@test/test.jpg"
+curl.exe -X POST "http://localhost/predict/person" -H "accept: application/json" -H "Content-Type: multipart/form-data" -F "file=@test.jpg"
 ```
 Risposta di successo:
 ```bash
@@ -83,3 +85,33 @@ Risposta di successo:
   ]
 }
 ```
+
+---
+
+## 📊 Dashboard di Monitoraggio (Grafana)
+
+Il progetto include uno stack di monitoraggio pronto all'uso con **Prometheus** e **Grafana**, avviato automaticamente insieme agli altri servizi con `docker compose up -d`.
+
+### Accesso alla Dashboard
+
+1. Apri il browser su `http://localhost/grafana/` (o `http://<IP_SERVER>/grafana/` se su un server remoto). Grafana passa attraverso Nginx sulla porta 80, insieme all'API — non serve aprire porte aggiuntive sul firewall.
+2. Accedi con le credenziali di default:
+   - **Utente:** `admin`
+   - **Password:** `admin`
+   
+   > ⚠️ Cambia subito la password al primo accesso, oppure impostala in modo sicuro tramite le variabili `GF_SECURITY_ADMIN_USER` / `GF_SECURITY_ADMIN_PASSWORD` nel `docker-compose.yaml`.
+3. Nel menu laterale vai su **Dashboards** → troverai la dashboard **"YOLO Vision API - Monitoraggio"** già pronta.
+
+### Cosa mostra la dashboard
+
+- **Persone rilevate nel tempo:** andamento storico completo, letto direttamente dalla tabella `yolo_predictions` su SQL Server.
+- **Totale richieste e persone rilevate (cumulativo):** contatori real-time.
+- **Richieste al minuto / tasso di errore / latenza p95:** salute tecnica dell'API, utile per capire se il servizio sta reggendo il carico.
+- **Distribuzione persone per richiesta:** istogramma di quante persone vengono rilevate mediamente per foto.
+
+### Note tecniche
+
+- Prometheus raccoglie le metriche dall'endpoint `http://yolo-api:8000/metrics`, esposto automaticamente da FastAPI grazie a `prometheus-fastapi-instrumentator`.
+- I dati di Prometheus sono conservati per 30 giorni (configurabile in `docker-compose.yaml` con `--storage.tsdb.retention.time`); per lo storico a lungo termine fai riferimento a SQL Server, che non ha scadenza.
+- Le credenziali del datasource SQL Server in `grafana/provisioning/datasources/datasources.yml` devono coincidere con quelle usate in `DB_CONNECTION_STRING`: aggiornale insieme se le cambi.
+- Grafana non è più raggiungibile direttamente sulla porta 3000: il traffico passa esclusivamente da Nginx (`/grafana/`), riducendo la superficie esposta all'esterno. Prometheus resta accessibile solo dalla rete interna Docker, non esiste alcuna porta pubblica.
