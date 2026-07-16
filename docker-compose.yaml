@@ -5,7 +5,7 @@ services:
       # Formato: mssql+pyodbc://UTENTE:PASSWORD@SERVER:PORTA/NOME_DB?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
       - DB_CONNECTION_STRING=mssql+pyodbc://tecno:tecno@host.docker.internal:1433/YoloVisionDB?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
     container_name: yolo_api
-    restart: always
+    restart: unless-stopped
     expose:
       - "8000"
     deploy:
@@ -19,7 +19,7 @@ services:
   reverse-proxy:
     image: nginx:alpine
     container_name: nginx_proxy
-    restart: always
+    restart: unless-stopped
     ports:
       - "80:80"
     volumes:
