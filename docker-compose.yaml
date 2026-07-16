@@ -1,6 +1,6 @@
 services:
   yolo-api:
-    image: ghcr.io/raffy952/yolo-api-test:monitoring-with-grafana-and-prometeus
+    image: ghcr.io/raffy952/yolo-api-test:monitoring_with_Grafana_and_Prometeus
     environment:
       # Formato: mssql+pyodbc://UTENTE:PASSWORD@SERVER:PORTA/NOME_DB?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
       - DB_CONNECTION_STRING=mssql+pyodbc://tecno:tecno@host.docker.internal:1433/YoloVisionDB?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
