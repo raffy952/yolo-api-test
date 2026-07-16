@@ -60,16 +60,6 @@ docker compose pull
 docker compose up -d
 ```
 
-### 4. Deploy in Produzione / Locale
-Apri il terminale (su Linux o WSL) nella cartella contenente il `docker-compose.yml` ed esegui:
-```bash
-# Scarica l'ultima immagine compilata dalla CI/CD
-docker compose pull
-
-# Avvia l'infrastruttura in background
-docker compose up -d
-```
-
 ## 📡 Utilizzo dell'API
 Test di Salute::
 ```bash
