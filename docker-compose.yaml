@@ -1,9 +1,26 @@
+secrets:
+  db_user:
+    file: ./secrets/db_user.txt
+  db_password:
+    file: ./secrets/db_password.txt
+  grafana_admin_user:
+    file: ./secrets/grafana_admin_user.txt
+  grafana_admin_password:
+    file: ./secrets/grafana_admin_password.txt
+
 services:
   yolo-api:
-    image: ghcr.io/raffy952/yolo-api-test:monitoring_with_Grafana_and_Prometeus
+    image: ghcr.io/raffy952/yolo-api-test:crypto_version
     environment:
-      # Formato: mssql+pyodbc://UTENTE:PASSWORD@SERVER:PORTA/NOME_DB?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
-      - DB_CONNECTION_STRING=mssql+pyodbc://tecno:tecno@host.docker.internal:1433/YoloVisionDB?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
+      # Utente/password letti dai file in secrets/, non compaiono qui ne' in "docker inspect"
+      - DB_USER_FILE=/run/secrets/db_user
+      - DB_PASSWORD_FILE=/run/secrets/db_password
+      - DB_SERVER=${DB_SERVER}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+    secrets:
+      - db_user
+      - db_password
     container_name: yolo_api
     restart: unless-stopped
     expose:
@@ -22,11 +39,15 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
     depends_on:
       - yolo-api
       - grafana
+      - prometheus
     networks:
       - vision_net
 
@@ -40,10 +61,11 @@ services:
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.retention.time=30d"
-    ports:
-      # Esposto direttamente per poter navigare la UI di Prometheus da http://localhost:9090
-      # Su un server esposto a internet valuta di rimuoverla e passare da Nginx come per Grafana.
-      - "9090:9090"
+      # Serve la UI sotto /prometheus/ cosi' puo' stare dietro Nginx con auth
+      - "--web.route-prefix=/prometheus/"
+      - "--web.external-url=https://localhost/prometheus/"
+    expose:
+      - "9090"
     depends_on:
       - yolo-api
     networks:
@@ -54,13 +76,24 @@ services:
     container_name: grafana
     restart: unless-stopped
     environment:
-      # Cambia la password admin al primo accesso, oppure impostala qui
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      # Login admin letto dai file in secrets/ (supporto nativo Grafana per il suffisso __FILE)
+      - GF_SECURITY_ADMIN_USER__FILE=/run/secrets/grafana_admin_user
+      - GF_SECURITY_ADMIN_PASSWORD__FILE=/run/secrets/grafana_admin_password
       - GF_INSTALL_PLUGINS=
-      # Necessario perché Grafana è raggiungibile tramite Nginx sotto /grafana/
-      - GF_SERVER_ROOT_URL=http://localhost/grafana/
+      - GF_SERVER_ROOT_URL=https://localhost/grafana/
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      # Necessario per il datasource SQL Server, che legge le credenziali con $__env{}
+      # (qui restano come env var "semplici": Grafana non supporta __FILE dentro il
+      # provisioning YAML, solo per le proprie impostazioni core come l'admin sopra)
+      - GF_ENABLE_ENVIRONMENT_VARIABLE_EXPANSION=true
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_SERVER=${DB_SERVER}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+    secrets:
+      - grafana_admin_user
+      - grafana_admin_password
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro

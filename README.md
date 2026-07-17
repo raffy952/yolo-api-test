@@ -40,16 +40,65 @@ Per eseguire questo progetto in locale o su un server, sono necessari:
 
 ## 🛠️ Configurazione e Avvio
 
+### 0. Sicurezza: credenziali, HTTPS e autenticazione
+
+Prima di avviare i servizi, prepara tre cose:
+
+**a) File `.env` con le tue credenziali reali, poi cifrato**
+```powershell
+Copy-Item .env.example .env
+notepad .env   # personalizza i valori, in particolare DB_PASSWORD e GRAFANA_ADMIN_PASSWORD
+```
+Cifra il file con lo script incluso (ti chiede una passphrase, usa un container Docker temporaneo, non serve openssl installato):
+```powershell
+.\encrypt-env.ps1
+```
+Questo crea `.env.enc` (cifrato, sicuro da committare su Git) e puoi cancellare il `.env` in chiaro:
+```powershell
+Remove-Item .env
+```
+Ogni volta che devi avviare i servizi, decifralo al volo — questo genera anche i file individuali in `secrets/` che Docker Compose monta nei container:
+```powershell
+.\decrypt-env.ps1
+docker compose up -d
+```
+`.env` e `secrets/` restano sul disco solo per il tempo necessario — sono comunque esclusi da Git in `.gitignore`.
+
+> ⚠️ Se perdi la passphrase, non c'è modo di recuperare `.env.enc`: tienila in un posto sicuro (password manager), separata dal repository.
+
+**Un livello in più: Docker secrets**
+
+Le credenziali più sensibili (utente/password del DB, login admin di Grafana) non arrivano ai container come variabili d'ambiente in chiaro, ma come **file montati in sola lettura** dentro `/run/secrets/`. Questo significa che non compaiono con `docker inspect` né con `docker exec <container> env` — solo il processo applicativo dentro il container li legge, dal file. Lo trovi già configurato in `docker-compose.yaml` (blocco `secrets:` in cima al file) ed è `decrypt-env.ps1` a generare i singoli file in `secrets/` per te.
+
+> Nota onesta: il datasource SQL Server di Grafana fa eccezione — le credenziali gli arrivano ancora come variabile d'ambiente (`$__env{DB_USER}`/`$__env{DB_PASSWORD}`), perché il provisioning YAML di Grafana non supporta la lettura da file per questo scopo specifico. È comunque protetto dagli altri livelli (file `.env` cifrato, nessun valore in chiaro nel `docker-compose.yaml`).
+
+**b) Certificato TLS per HTTPS** (self-signed, va bene per uso locale/interno; per un dominio pubblico usa invece Let's Encrypt/Certbot)
+```powershell
+mkdir nginx\certs
+docker run --rm -v ${PWD}/nginx/certs:/certs alpine/openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /certs/privkey.pem -out /certs/fullchain.pem -subj "/CN=localhost"
+```
+Il browser mostrerà comunque un avviso "connessione non sicura" la prima volta, perché il certificato è autofirmato: è normale, basta procedere/accettare l'eccezione.
+
+**c) File di password per Prometheus** (basic auth)
+```powershell
+docker run --rm httpd:2.4-alpine htpasswd -nbB admin "LaTuaPasswordSicura" > nginx\.htpasswd
+```
+Sostituisci `admin` e `"LaTuaPasswordSicura"` con le credenziali che vuoi usare per accedere a Prometheus. Puoi ripetere il comando (con `>>` invece di `>`) per aggiungere altri utenti.
+
 ### 1. Configurazione del Database
 Se utilizzi SQL Server su Windows locale (Host), assicurati di aver **abilitato il protocollo TCP/IP** e impostato la porta `1433` dal *SQL Server Configuration Manager*. L'Autenticazione Mista (SQL Server Authentication) deve essere attiva.
 
-Nel file `docker-compose.yaml`, aggiorna la variabile d'ambiente `DB_CONNECTION_STRING`.
-Se il DB è sull'host, utilizza `host.docker.internal`:
+Le credenziali del database ora vivono nel file `.env` (vedi punto 0 qui sopra), non più nel `docker-compose.yaml`:
 ```text
-DB_CONNECTION_STRING=mssql+pyodbc://<UTENTE>:<PASSWORD>@host.docker.internal:1433/YoloVisionDB?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
+DB_USER=<UTENTE>
+DB_PASSWORD=<PASSWORD>
+DB_SERVER=host.docker.internal
+DB_PORT=1433
+DB_NAME=YoloVisionDB
 ```
+Se il DB è sull'host, `DB_SERVER` resta `host.docker.internal`.
 
-> Se cambi utente/password qui, aggiorna anche le stesse credenziali nel datasource SQL Server di Grafana (`grafana/provisioning/datasources/datasources.yml`) — vedi sezione monitoraggio più sotto.
+> Se cambi queste credenziali, il datasource SQL Server di Grafana si aggiorna automaticamente: legge gli stessi valori da `.env` grazie a `GF_ENABLE_ENVIRONMENT_VARIABLE_EXPANSION`.
 
 ### 2. Autenticazione Docker (GitHub Container Registry)
 Per scaricare l'immagine compilata dalla tua pipeline, devi fare il login con Docker usando il tuo username GitHub e un **Personal Access Token (classic)** con i permessi `read:packages`:
@@ -78,12 +127,12 @@ docker compose ps
 ## 📡 Utilizzo dell'API
 Test di Salute:
 ```bash
-curl http://localhost/health
+curl -k https://localhost/health
 ```
 
 Inferenza (Person Detection):
 ```bash
-curl.exe -X POST "http://localhost/predict/person" -H "accept: application/json" -H "Content-Type: multipart/form-data" -F "file=@test.jpg"
+curl.exe -k -X POST "https://localhost/predict/person" -H "accept: application/json" -H "Content-Type: multipart/form-data" -F "file=@test.jpg"
 ```
 Risposta di successo:
 ```bash
@@ -99,6 +148,8 @@ Risposta di successo:
 }
 ```
 
+> Il flag `-k` dice a curl di accettare il certificato autofirmato. Se in futuro usi un certificato reale (Let's Encrypt), puoi rimuoverlo.
+
 ---
 
 ## 📊 Monitoraggio (Prometheus + Grafana)
@@ -107,15 +158,14 @@ Il progetto include uno stack di monitoraggio pronto all'uso, avviato automatica
 
 | Strumento | A cosa serve | Come accederci |
 |---|---|---|
-| **Grafana** | Dashboard visuale, pensata per l'uso quotidiano | `http://localhost/grafana/` (tramite Nginx) |
-| **Prometheus** | Query dirette sulle metriche tecniche, debug, verifica che tutto funzioni | `http://localhost:9090` (porta diretta) |
+| **Grafana** | Dashboard visuale, pensata per l'uso quotidiano | `https://localhost/grafana/` (tramite Nginx) |
+| **Prometheus** | Query dirette sulle metriche tecniche, debug, verifica che tutto funzioni | `https://localhost/prometheus/` (tramite Nginx, richiede login) |
 
 ### 🖥️ Grafana — la dashboard pronta all'uso
 
 **Accesso**
-1. Apri `http://localhost/grafana/` (o `http://<IP_SERVER>/grafana/` su un server remoto). Passa da Nginx sulla porta 80, non serve aprire altre porte sul firewall.
-2. Login con le credenziali di default: utente `admin`, password `admin`.
-   > ⚠️ Cambiala al primo accesso, oppure impostala in modo sicuro tramite `GF_SECURITY_ADMIN_USER` / `GF_SECURITY_ADMIN_PASSWORD` nel `docker-compose.yaml`.
+1. Apri `https://localhost/grafana/` (o `https://<IP_SERVER>/grafana/` su un server remoto). Passa da Nginx sulla porta 443 (HTTPS), non serve aprire altre porte sul firewall. Il browser segnalerà il certificato autofirmato: procedi/accetta l'eccezione.
+2. Login con le credenziali che hai messo in `.env` (`GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`).
 3. Menu laterale → **Dashboards** → dashboard **"YOLO Vision API - Monitoraggio"**, già pronta e provisionata automaticamente.
 
 **Cosa puoi vedere e fare**
@@ -131,7 +181,7 @@ Il progetto include uno stack di monitoraggio pronto all'uso, avviato automatica
 
 ### 🔍 Prometheus — query dirette e debug
 
-**Accesso:** `http://localhost:9090`
+**Accesso:** `https://localhost/prometheus/` — ti verrà chiesto un login (le credenziali che hai scelto generando `nginx/.htpasswd` al punto 0). Il browser segnalerà il certificato autofirmato: procedi/accetta l'eccezione.
 
 Pagine più utili:
 
@@ -156,6 +206,8 @@ Prometheus è pensato più per il debug tecnico e le query ad-hoc; per un uso qu
 
 - Prometheus raccoglie le metriche dall'endpoint `http://yolo-api:8000/metrics`, esposto automaticamente da FastAPI grazie a `prometheus-fastapi-instrumentator`. Se questo endpoint risponde `404`, quasi sempre significa che il container `yolo-api` sta girando con un'immagine più vecchia delle modifiche — verifica con `docker inspect yolo_api --format='{{.Config.Image}}'` e rifai `docker compose pull && docker compose up -d --force-recreate yolo-api`.
 - I dati in Prometheus sono conservati 30 giorni (configurabile in `docker-compose.yaml` con `--storage.tsdb.retention.time`); per lo storico a lungo termine fai riferimento a SQL Server, che non ha scadenza.
-- Le credenziali del datasource SQL Server in `grafana/provisioning/datasources/datasources.yml` devono coincidere con quelle in `DB_CONNECTION_STRING`: aggiornale insieme se le cambi.
-- Grafana non è raggiungibile direttamente sulla porta 3000: il traffico passa esclusivamente da Nginx (`/grafana/`), riducendo la superficie esposta all'esterno.
-- Prometheus è attualmente esposto sulla porta `9090` direttamente sull'host, comodo per debug in locale. Su un server esposto a internet valuta di rimuovere questa porta pubblica (tornare a `expose` invece di `ports` nel `docker-compose.yaml`) e instradarlo dietro Nginx come Grafana, magari con autenticazione.
+- Le credenziali del database e dell'admin Grafana vivono in `.env` (cifrato a riposo in `.env.enc`) e vengono distribuite ai container come Docker secrets (file in `/run/secrets/`), non come variabili d'ambiente in chiaro — eccetto il datasource SQL Server di Grafana, vedi nota sopra.
+- Sia Grafana (`/grafana/`) che Prometheus (`/prometheus/`) passano esclusivamente da Nginx via HTTPS: nessuna delle due porte interne (3000, 9090) è esposta direttamente sull'host.
+- Prometheus è protetto da autenticazione basic auth (file `nginx/.htpasswd`); Grafana ha il proprio sistema di login integrato.
+- Il certificato TLS generato con `openssl` è **autofirmato**: perfetto per uso locale/interno, ma i browser mostreranno un avviso di sicurezza. Per un dominio pubblico, sostituiscilo con uno emesso da un'autorità riconosciuta (es. Let's Encrypt/Certbot, anche automatizzabile con un container `certbot` aggiuntivo nel compose).
+- Se rigeneri `.env`, `nginx/certs/` o `nginx/.htpasswd`, ricordati di riavviare i servizi interessati (`docker compose up -d`) perché i container li leggono solo all'avvio.

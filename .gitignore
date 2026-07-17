@@ -1,0 +1,12 @@
+# Segreti e credenziali - non committare mai IN CHIARO
+.env
+secrets/
+nginx/certs/
+nginx/.htpasswd
+
+# .env.enc invece e' cifrato: puoi committarlo tranquillamente, NON escluderlo
+
+# Dati locali Python/Docker
+__pycache__/
+*.pyc
+.venv/
