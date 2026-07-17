@@ -40,8 +40,10 @@ services:
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.retention.time=30d"
-    expose:
-      - "9090"
+    ports:
+      # Esposto direttamente per poter navigare la UI di Prometheus da http://localhost:9090
+      # Su un server esposto a internet valuta di rimuoverla e passare da Nginx come per Grafana.
+      - "9090:9090"
     depends_on:
       - yolo-api
     networks:
