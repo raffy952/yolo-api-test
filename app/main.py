@@ -4,6 +4,8 @@ import json
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from sqlalchemy.orm import Session
 from ultralytics import YOLO
+from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_client import Counter, Histogram
 
 # Import dal tuo file database.py
 from database import PredictionLog, get_db
@@ -12,6 +14,26 @@ app = FastAPI(title="YOLO Person Detection API")
 
 # PRE-CARICAMENTO: Il modello viene caricato in memoria all'avvio del container.
 model = YOLO("yolov8n.pt")
+
+# --- METRICHE PROMETHEUS ---
+# Metriche HTTP standard (richieste/sec, latenza, status code, ecc.)
+# esposte automaticamente su /metrics
+Instrumentator().instrument(app).expose(app)
+
+# Metriche di business custom
+PERSONS_DETECTED_TOTAL = Counter(
+    "persons_detected_total",
+    "Numero totale cumulativo di persone rilevate da tutte le richieste"
+)
+PREDICTION_REQUESTS_TOTAL = Counter(
+    "prediction_requests_total",
+    "Numero totale di richieste di inferenza processate con successo"
+)
+PERSONS_PER_REQUEST = Histogram(
+    "persons_per_request",
+    "Distribuzione del numero di persone rilevate per singola richiesta",
+    buckets=(0, 1, 2, 3, 5, 8, 13, 21, 50)
+)
 
 @app.get("/health")
 def health_check():
@@ -34,7 +56,7 @@ async def predict_person(file: UploadFile = File(...), db: Session = Depends(get
 
         # 2. Inferenza: classes=[0] forza YOLO a cercare solo persone. conf=0.5 imposta la soglia.
         results = model.predict(source=img, classes=[0], conf=0.5, verbose=False)
-        
+
         # 3. Estrazione delle Bounding Box
         detections = []
         for result in results:
@@ -42,7 +64,7 @@ async def predict_person(file: UploadFile = File(...), db: Session = Depends(get
                 # Estrai le coordinate (x_min, y_min, x_max, y_max)
                 x1, y1, x2, y2 = box.xyxy[0].tolist()
                 conf = float(box.conf[0])
-                
+
                 detections.append({
                     "bbox": [int(x1), int(y1), int(x2), int(y2)],
                     "confidence": round(conf, 2)
@@ -56,13 +78,18 @@ async def predict_person(file: UploadFile = File(...), db: Session = Depends(get
         )
         db.add(new_log)
         db.commit()
-        
+
         # Ottiene l'ID autogenerato da SQL Server
-        db.refresh(new_log) 
+        db.refresh(new_log)
+
+        # 5. AGGIORNAMENTO METRICHE PROMETHEUS
+        PREDICTION_REQUESTS_TOTAL.inc()
+        PERSONS_DETECTED_TOTAL.inc(persons_count)
+        PERSONS_PER_REQUEST.observe(persons_count)
 
         return {
             "log_id": new_log.id,
-            "persons_detected": persons_count, 
+            "persons_detected": persons_count,
             "detections": detections
         }
 

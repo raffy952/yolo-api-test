@@ -1,0 +1,31 @@
+apiVersion: 1
+
+datasources:
+  # Metriche tecniche/real-time (richieste, latenza, errori, contatori di business)
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+
+  # Dati storici completi dalla tabella yolo_predictions (persone rilevate, timestamp, bbox)
+  # NOTA: le credenziali qui sotto devono corrispondere a quelle in DB_CONNECTION_STRING
+  # nel docker-compose.yaml. Aggiornale se le cambi.
+  - name: SQL Server - YoloVisionDB
+    uid: mssql-yolovision
+    type: mssql
+    access: proxy
+    url: host.docker.internal:1433
+    database: YoloVisionDB
+    user: tecno
+    editable: true
+    jsonData:
+      encrypt: "true"
+      tlsSkipVerify: true
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+    secureJsonData:
+      password: tecno
