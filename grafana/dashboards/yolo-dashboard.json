@@ -1,7 +1,7 @@
 {
   "title": "YOLO Vision API - Monitoraggio",
   "uid": "yolo-vision-overview",
-  "timezone": "browser",
+  "timezone": "utc",
   "schemaVersion": 39,
   "version": 1,
   "refresh": "30s",
@@ -15,7 +15,7 @@
       "datasource": { "type": "mssql", "uid": "mssql-yolovision" },
       "targets": [
         {
-          "rawSql": "SELECT timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Central European Standard Time' AS time, persons_detected FROM yolo_predictions ORDER BY timestamp",
+          "rawSql": "SELECT timestamp AS time, persons_detected FROM yolo_predictions ORDER BY timestamp",
           "format": "time_series",
           "refId": "A"
         }

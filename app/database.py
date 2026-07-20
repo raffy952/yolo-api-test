@@ -2,11 +2,23 @@ import os
 import json
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from urllib.parse import quote_plus
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import OperationalError
+
+ROME_TZ = ZoneInfo("Europe/Rome")
+
+
+def now_rome() -> datetime:
+    """
+    Restituisce l'ora locale italiana attuale (gestisce da sola il passaggio
+    tra ora solare CET e legale CEST), come datetime "naive" (senza tzinfo)
+    perche' la colonna SQL Server e' un DATETIME semplice.
+    """
+    return datetime.now(ROME_TZ).replace(tzinfo=None)
 
 
 def _read_secret(file_env_var: str, plain_env_var: str, default: str = None) -> str:
@@ -98,7 +110,7 @@ class PredictionLog(Base):
     __tablename__ = "yolo_predictions"
 
     id = Column(Integer, primary_key=True, index=True)
-    timestamp = Column(DateTime, default=datetime.now)
+    timestamp = Column(DateTime, default=now_rome)
     persons_detected = Column(Integer)
     detections_json = Column(String(length=4000))
 

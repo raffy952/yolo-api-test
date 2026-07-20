@@ -8,3 +8,4 @@ numpy>=1.23.5
 sqlalchemy>=2.0.0
 pyodbc>=4.0.39
 prometheus-fastapi-instrumentator>=6.1.0
+tzdata>=2024.1
