@@ -98,7 +98,7 @@ class PredictionLog(Base):
     __tablename__ = "yolo_predictions"
 
     id = Column(Integer, primary_key=True, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=datetime.now)
     persons_detected = Column(Integer)
     detections_json = Column(String(length=4000))
 
