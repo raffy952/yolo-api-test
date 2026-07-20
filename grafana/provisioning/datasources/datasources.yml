@@ -2,13 +2,15 @@ apiVersion: 1
 
 datasources:
   # Metriche tecniche/real-time (richieste, latenza, errori, contatori di business)
-  # Raggiunto direttamente dentro la rete Docker interna: non serve passare
-  # dal prefisso /prometheus/ di Nginx, quello serve solo per l'accesso da browser.
+  # Raggiunto dentro la rete Docker interna. IMPORTANTE: il path /prometheus deve
+  # esserci anche qui (non solo nel routing Nginx), perche' Prometheus gira con
+  # --web.route-prefix=/prometheus/ e quindi serve TUTTE le sue API sotto quel
+  # prefisso, comprese quelle che Grafana usa per interrogarlo.
   - name: Prometheus
     uid: prometheus
     type: prometheus
     access: proxy
-    url: http://prometheus:9090
+    url: http://prometheus:9090/prometheus
     isDefault: true
     editable: true
 
